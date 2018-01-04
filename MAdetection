@@ -1,0 +1,98 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Jan 03 00:39:11 2018
+@author: David Marín Del Pino
+"""
+from skimage import io
+from skimage import filters as skfilt
+from skimage import img_as_float
+from skimage import exposure
+import numpy as np
+import matplotlib.pyplot as plt
+import skimage.morphology
+
+
+# Mostrar imagen
+def showImage(img):
+    io.imshow(img)
+    plt.figure()
+    plt.axis('on')
+    
+def imgInfo(img):
+    print ""
+    print "información del tipo de imagen:"  , img.dtype
+    print "Información del tamaño de la imagen", img.shape
+    print "Tamaño en bytes: ", getSizeInBytes(img)
+    
+def showImgAndInfo(img):
+    plt.figure()
+    showImage(img)
+    imgInfo(img)    
+    
+def getSizeInBytes(img):
+    dims = img.shape 
+    bytes = 1
+    for i in dims:
+        bytes = bytes * i
+    return bytes
+# Apertura con EE circular de radio 1 
+def aperturaFilter(img):
+    EE_circ = skimage.morphology.disk(1)
+    img_open=skimage.morphology.opening(img,EE_circ)
+    return img_open
+# Negativizar la imagen    
+def negative(img):
+    pixmat = list(img.shape)
+    negative = np.zeros(pixmat)
+    for i in range (0,pixmat[0]-1):
+        for j in range (0, pixmat[1]-1):
+            value = 255 - img[i,j]
+            negative[i,j] = value
+    return negative
+
+# Obtener imagen umbralizada
+def umbralize(img, threshold):
+    pixmat = list(img.shape)
+    result = np.zeros(pixmat)
+    for i in range (0,pixmat[0]-1):
+        for j in range (0, pixmat[1]-1):
+            value = img[i,j]
+            if value < threshold:
+                result[i,j] = 0
+            else:
+                result[i,j] = 1   
+    return result
+    
+# Construcción del histograma
+def makeHist(img, title):
+    plt.hist(img.ravel(),bins = 50)
+    plt.title(title)
+    plt.xlabel("Intensidad de gris")
+    plt.ylabel("pixels")
+
+# Escribir el nombre de la carpeta y de la imagen a tratar
+path = './ImagesTIM/'
+img_folder = 'MAE0000043/'
+img_name = 'DS000DGS.JPG'
+img = io.imread(path + img_folder + img_name)
+showImage(img)
+showImgAndInfo(img)
+# Extracción de la componente verde
+g_comp = img[:,:,1]
+showImage(g_comp)
+showImgAndInfo(g_comp)
+# Apertura con EE circular de radio 1 sobre la imagen en verde
+img_open=aperturaFilter(g_comp)
+showImgAndInfo(img_open)
+showImage(img_open)
+# Negativizado de la componente verde
+g_comp_neg = negative(g_comp)
+showImgAndInfo(g_comp_neg)
+showImage(g_comp_neg)
+#pendiente de implementar: mejora de contraste mediante filtro predictivo 2D
+#Imprescindible para poder segmentar y eliminar el árbol vascular
+
+# Umbralización para obtener el arbol vascular
+#th = skfilt.threshold_otsu(g_comp_neg)
+#bv_mask = umbralize(g_comp_neg, th)
+#showImage(bv_mask)
