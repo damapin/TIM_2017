@@ -49,12 +49,15 @@ def makeHist(img, title):
 def getBvMask(img):
     # Extracción de componentes
     b,g,r = cv2.split(img)
+    
+    #cv2.imwrite("canal_verde.jpg", g)
     #showImage(g)
     
     # Ecualización de histograma mediante filtro adaptativo.
     # El objetivo es mejorar el contraste para extraer la máscara del árbol vascular.
-    clahe = cv2.createCLAHE(clipLimit=3.5, tileGridSize=(4,4))
+    clahe = cv2.createCLAHE(clipLimit=3.5, tileGridSize=(6,6))
     enhanced_contrast_img = clahe.apply(g)
+    #cv2.imwrite("verde_contraste_mejorado.jpg", enhanced_contrast_img)
     #showImage(enhanced_contrast_img)
     
     
@@ -65,9 +68,10 @@ def getBvMask(img):
     R2 = cv2.morphologyEx(r2, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(11,11)), iterations = 1)
     r3 = cv2.morphologyEx(R2, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(23,23)), iterations = 1)
     R3 = cv2.morphologyEx(r3, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(23,23)), iterations = 1)	
+    # tophat dual: diferencia entre el cierre y la imagen original.
     f4 = cv2.subtract(R3,enhanced_contrast_img)
     f5 = clahe.apply(f4)		
-    
+    #cv2.imwrite("tophat.jpg", f5)
     # Eliminación del ruido perimetral
     ret,f6 = cv2.threshold(f5,15,255,cv2.THRESH_BINARY)	
     mask = np.ones(f5.shape[:2], dtype="uint8") * 255	
@@ -76,11 +80,12 @@ def getBvMask(img):
     	if cv2.contourArea(cnt) <= 200:
     		cv2.drawContours(mask, [cnt], -1, 0, -1)			
     im = cv2.bitwise_and(f5, f5, mask=mask)
+    #cv2.imwrite("tophat_sin_ruido.jpg", im)
     # Umbralización y erosión para recuperar los vasos sanguíneos
     ret,fin = cv2.threshold(im,15,255,cv2.THRESH_BINARY_INV)			
     newfin = cv2.erode(fin, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(3,3)), iterations=1)	
-    
-    # Eliminación de pequeñas ramas
+    #cv2.imwrite("arbol_vascular.jpg", newfin)
+    # Eliminación de pequeñas imperfecciones
     fundus_eroded = cv2.bitwise_not(newfin)	
     xmask = np.ones(img.shape[:2], dtype="uint8") * 255
     x1, xcontours, xhierarchy = cv2.findContours(fundus_eroded.copy(),cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE)	
@@ -95,8 +100,10 @@ def getBvMask(img):
     	if(shape=="circle"):
     		cv2.drawContours(xmask, [cnt], -1, 0, -1)	
     	
-    finimage = cv2.bitwise_and(fundus_eroded,fundus_eroded,mask=xmask)	
-    blood_vessels = cv2.bitwise_not(finimage)
+    finimage = cv2.bitwise_and(fundus_eroded,fundus_eroded,mask=xmask)
+    #cv2.imwrite("arbol_vascular_mejorado.jpg", finimage)	
+    blood_vessels = finimage#cv2.bitwise_not(finimage)
+    #cv2.imwrite("mascara_arbol_vascular.jpg", blood_vessels)
     return blood_vessels
 
 # Escribir el nombre de la carpeta y de la imagen a tratar
@@ -105,9 +112,27 @@ img_folder = 'MAE0000043/'
 img_name = 'DS000DGS.JPG'
 img = io.imread(path + img_folder + img_name)
 showImage(img)
-
+#cv2.imwrite("original.jpg", img)
 bv_mask = getBvMask(img)
 
+# Inpainting sobre la imagen original para extraer los vasos:
+inpaint=cv2.inpaint(img, bv_mask,5,cv2.INPAINT_TELEA)
+#io.imsave('sin_vasos.jpg', inpaint)
+
+# Componente verde de la imagen sin vasos
+r,inpaint_g,b = cv2.split(inpaint)
+
+#filtro de medianas para eliminar el ruido
+from skimage.morphology import square
+from skimage.filters import median
+kernel = square(5)
+inpaint_g_f = median(inpaint_g, kernel)
+
+# Realce de contraste con ecualización CLAHE
+clahe = cv2.createCLAHE(clipLimit=3.5, tileGridSize=(6,6))
+enhanced_contrast_inpaint = clahe.apply(inpaint_g_f)
+showImage(enhanced_contrast_inpaint)
+io.imsave('base_para_deteccion.jpg', enhanced_contrast_inpaint)
 
 
 
