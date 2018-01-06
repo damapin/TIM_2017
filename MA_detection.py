@@ -37,7 +37,7 @@ def umbralize(img, threshold):
                 result[i,j] = 0
             else:
                 result[i,j] = 1   
-    return result
+    return skimage.img_as_ubyte(result)
     
 # Construcción del histograma
 def makeHist(img, title):
@@ -48,8 +48,7 @@ def makeHist(img, title):
     
 def getBvMask(img):
     # Extracción de componentes
-    b,g,r = cv2.split(img)
-    
+    b,g,r = cv2.split(img) 
     #cv2.imwrite("canal_verde.jpg", g)
     #showImage(g)
     
@@ -61,17 +60,20 @@ def getBvMask(img):
     #showImage(enhanced_contrast_img)
     
     
-    # Tres pasadas de apertura y cierre para implementar un tophat. Directamente el resultado no es el esperado
+    # Tres pasadas de apertura y cierre para implementar un tophat dual. 
+    # Aplicando la función correspondiente de opencv directamente el resultado no es el esperado
     r1 = cv2.morphologyEx(enhanced_contrast_img, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5)), iterations = 1)
     R1 = cv2.morphologyEx(r1, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5)), iterations = 1)
     r2 = cv2.morphologyEx(R1, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(11,11)), iterations = 1)
     R2 = cv2.morphologyEx(r2, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(11,11)), iterations = 1)
     r3 = cv2.morphologyEx(R2, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(23,23)), iterations = 1)
     R3 = cv2.morphologyEx(r3, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(23,23)), iterations = 1)	
+    
     # tophat dual: diferencia entre el cierre y la imagen original.
     f4 = cv2.subtract(R3,enhanced_contrast_img)
     f5 = clahe.apply(f4)		
     #cv2.imwrite("tophat.jpg", f5)
+    
     # Eliminación del ruido perimetral
     ret,f6 = cv2.threshold(f5,15,255,cv2.THRESH_BINARY)	
     mask = np.ones(f5.shape[:2], dtype="uint8") * 255	
@@ -81,11 +83,13 @@ def getBvMask(img):
     		cv2.drawContours(mask, [cnt], -1, 0, -1)			
     im = cv2.bitwise_and(f5, f5, mask=mask)
     #cv2.imwrite("tophat_sin_ruido.jpg", im)
+    
     # Umbralización y erosión para recuperar los vasos sanguíneos
     ret,fin = cv2.threshold(im,15,255,cv2.THRESH_BINARY_INV)			
     newfin = cv2.erode(fin, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(3,3)), iterations=1)	
     #cv2.imwrite("arbol_vascular.jpg", newfin)
-    # Eliminación de pequeñas imperfecciones
+    
+    # Eliminación de elementos curvos
     fundus_eroded = cv2.bitwise_not(newfin)	
     xmask = np.ones(img.shape[:2], dtype="uint8") * 255
     x1, xcontours, xhierarchy = cv2.findContours(fundus_eroded.copy(),cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE)	
@@ -113,6 +117,8 @@ img_name = 'DS000DGS.JPG'
 img = io.imread(path + img_folder + img_name)
 showImage(img)
 #cv2.imwrite("original.jpg", img)
+
+# Extracción de máscara vascular
 bv_mask = getBvMask(img)
 
 # Inpainting sobre la imagen original para extraer los vasos:
@@ -120,20 +126,45 @@ inpaint=cv2.inpaint(img, bv_mask,5,cv2.INPAINT_TELEA)
 #io.imsave('sin_vasos.jpg', inpaint)
 
 # Componente verde de la imagen sin vasos
-r,inpaint_g,b = cv2.split(inpaint)
-
-#filtro de medianas para eliminar el ruido
-from skimage.morphology import square
-from skimage.filters import median
-kernel = square(5)
-inpaint_g_f = median(inpaint_g, kernel)
+ri,inpaint_g,bi = cv2.split(inpaint)
 
 # Realce de contraste con ecualización CLAHE
-clahe = cv2.createCLAHE(clipLimit=3.5, tileGridSize=(6,6))
-enhanced_contrast_inpaint = clahe.apply(inpaint_g_f)
+clahe = cv2.createCLAHE(clipLimit=3, tileGridSize=(6,6))
+enhanced_contrast_inpaint = clahe.apply(inpaint_g)
 showImage(enhanced_contrast_inpaint)
-io.imsave('base_para_deteccion.jpg', enhanced_contrast_inpaint)
 
+# filtro de medianas para eliminar el ruido
+from skimage.morphology import square
+from skimage.filters import median
+kernel = square(3)
+inpaint_g_fm = median(enhanced_contrast_inpaint, kernel)
+showImage(inpaint_g_fm)
+#io.imsave('base_para_deteccion_filtro_medianas.jpg', inpaint_g_fm)
 
+# filtro gaussiano
+from skimage.filters import gaussian
+inpaint_g_fg = skimage.img_as_ubyte(gaussian(enhanced_contrast_inpaint, 2))
+showImage(inpaint_g_fg)
+#io.imsave('base_para_deteccion_filtro_Gauss.jpg', inpaint_g_fg)
 
+# El resultado del filtro de medianas está más contrastado. 
+# Vamos a hacer el tophat dual con esa imagen
+
+# Máscara externa
+r,g,b = cv2.split(img)
+em1 = umbralize(r, skimage.filters.threshold_otsu(r))
+ext_mask = cv2.bitwise_not(em1)
+
+# tophat dual
+kernel_thd = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(4,4))
+thd = cv2.morphologyEx(inpaint_g_fg,cv2.MORPH_BLACKHAT,kernel_thd)
+thd = clahe.apply(thd)
+candidates = cv2.subtract(thd, ext_mask)
+#candidates = cv2.subtract(candidates, bv_mask)
+showImage(candidates)
+
+# Umbralización
+# Es importante encontrar un umbral adecuado. Salen demasiados candidatos
+th_cand = umbralize(candidates, 24)
+showImage(th_cand)
 
