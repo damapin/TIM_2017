@@ -122,14 +122,14 @@ showImage(img)
 bv_mask = getBvMask(img)
 
 # Inpainting sobre la imagen original para extraer los vasos:
-inpaint=cv2.inpaint(img, bv_mask,5,cv2.INPAINT_TELEA)
+inpaint=cv2.inpaint(img, bv_mask,8,cv2.INPAINT_TELEA)
 #io.imsave('sin_vasos.jpg', inpaint)
 
 # Componente verde de la imagen sin vasos
 ri,inpaint_g,bi = cv2.split(inpaint)
 
 # Realce de contraste con ecualización CLAHE
-clahe = cv2.createCLAHE(clipLimit=3, tileGridSize=(6,6))
+clahe = cv2.createCLAHE(clipLimit=4, tileGridSize=(6,6))
 enhanced_contrast_inpaint = clahe.apply(inpaint_g)
 showImage(enhanced_contrast_inpaint)
 
@@ -157,14 +157,18 @@ ext_mask = cv2.bitwise_not(em1)
 
 # tophat dual
 kernel_thd = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(4,4))
-thd = cv2.morphologyEx(inpaint_g_fg,cv2.MORPH_BLACKHAT,kernel_thd)
-thd = clahe.apply(thd)
-candidates = cv2.subtract(thd, ext_mask)
+thd = cv2.morphologyEx(inpaint_g_fm,cv2.MORPH_BLACKHAT,kernel_thd)
+thd_clahe = cv2.createCLAHE(clipLimit=0.5, tileGridSize=(5,5))
+thd_eh = thd_clahe.apply(thd)
+candidates = cv2.subtract(thd_eh, ext_mask)
 #candidates = cv2.subtract(candidates, bv_mask)
 showImage(candidates)
 
 # Umbralización
 # Es importante encontrar un umbral adecuado. Salen demasiados candidatos
-th_cand = umbralize(candidates, 24)
+th_cand = umbralize(candidates, 20)
 showImage(th_cand)
+io.imsave('mascara de cadidatos.jpg', th_cand)
+im_labeled, n_labels = skimage.measure.label(th_cand, 8,0, True)
+im_props = skimage.measure.regionprops(im_labeled)
 
