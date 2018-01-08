@@ -139,13 +139,13 @@ from skimage.filters import median
 kernel = square(3)
 inpaint_g_fm = median(enhanced_contrast_inpaint, kernel)
 showImage(inpaint_g_fm)
-#io.imsave('base_para_deteccion_filtro_medianas.jpg', inpaint_g_fm)
+io.imsave('base_para_deteccion_filtro_medianas.jpg', inpaint_g_fm)
 
 # filtro gaussiano
 from skimage.filters import gaussian
 inpaint_g_fg = skimage.img_as_ubyte(gaussian(enhanced_contrast_inpaint, 2))
 showImage(inpaint_g_fg)
-#io.imsave('base_para_deteccion_filtro_Gauss.jpg', inpaint_g_fg)
+io.imsave('base_para_deteccion_filtro_Gauss.jpg', inpaint_g_fg)
 
 # El resultado del filtro de medianas está más contrastado. 
 # Vamos a hacer el tophat dual con esa imagen
@@ -166,9 +166,22 @@ showImage(candidates)
 
 # Umbralización
 # Es importante encontrar un umbral adecuado. Salen demasiados candidatos
-th_cand = umbralize(candidates, 20)
+th_cand = umbralize(candidates, 28)
 showImage(th_cand)
 io.imsave('mascara de cadidatos.jpg', th_cand)
 im_labeled, n_labels = skimage.measure.label(th_cand, 8,0, True)
 im_props = skimage.measure.regionprops(im_labeled)
-
+#para remover objetos pequeños
+im_small = skimage.morphology.remove_small_objects(im_labeled,3)
+# Creacion del disco 
+kernel = skimage.morphology.disk(1)
+#Aplicacion del filtrado mediante máscara
+#im_opened = skimage.morphology.binary_dilation(im_labeled, kernel)
+#im_opened = skimage.img_as_ubyte(im_opened)
+im_opened = skimage.morphology.binary_dilation(im_small, kernel)
+im_opened = skimage.img_as_ubyte(im_opened)
+#showImage(im_opened)
+# Visualice la imagen filtrada y compare
+#io.imshow(im_opened)
+#http://scikit-image.org/docs/dev/api/skimage.morphology.html#skimage.morphology.remove_small_objects
+io.imsave('elemento_circular4.jpg', im_opened)
