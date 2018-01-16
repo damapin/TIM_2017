@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 Created on Wed Jan 03 00:39:11 2018
-
 @author: David Marín Del Pino
+@author: Jenifer Rodriguez Casas
+Grado Ingeniería en Telemática
 """
 import skimage
 from skimage import io
@@ -49,14 +50,14 @@ def makeHist(img, title):
 def getBvMask(img):
     # Extracción de componentes
     b,g,r = cv2.split(img) 
-    #cv2.imwrite("canal_verde.jpg", g)
+    cv2.imwrite("canal_verde.jpg", g)
     #showImage(g)
     
     # Ecualización de histograma mediante filtro adaptativo.
     # El objetivo es mejorar el contraste para extraer la máscara del árbol vascular.
     clahe = cv2.createCLAHE(clipLimit=3.5, tileGridSize=(6,6))
     enhanced_contrast_img = clahe.apply(g)
-    #cv2.imwrite("verde_contraste_mejorado.jpg", enhanced_contrast_img)
+    cv2.imwrite("verde_contraste_mejorado.jpg", enhanced_contrast_img)
     #showImage(enhanced_contrast_img)
     
     
@@ -72,7 +73,7 @@ def getBvMask(img):
     # tophat dual: diferencia entre el cierre y la imagen original.
     f4 = cv2.subtract(R3,enhanced_contrast_img)
     f5 = clahe.apply(f4)		
-    #cv2.imwrite("tophat.jpg", f5)
+    cv2.imwrite("tophat.jpg", f5)
     
     # Eliminación del ruido perimetral
     ret,f6 = cv2.threshold(f5,15,255,cv2.THRESH_BINARY)	
@@ -82,12 +83,12 @@ def getBvMask(img):
     	if cv2.contourArea(cnt) <= 200:
     		cv2.drawContours(mask, [cnt], -1, 0, -1)			
     im = cv2.bitwise_and(f5, f5, mask=mask)
-    #cv2.imwrite("tophat_sin_ruido.jpg", im)
+    cv2.imwrite("tophat_sin_ruido.jpg", im)
     
     # Umbralización y erosión para recuperar los vasos sanguíneos
     ret,fin = cv2.threshold(im,15,255,cv2.THRESH_BINARY_INV)			
     newfin = cv2.erode(fin, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(3,3)), iterations=1)	
-    #cv2.imwrite("arbol_vascular.jpg", newfin)
+    cv2.imwrite("arbol_vascular.jpg", newfin)
     
     # Eliminación de elementos curvos
     fundus_eroded = cv2.bitwise_not(newfin)	
@@ -105,9 +106,9 @@ def getBvMask(img):
     		cv2.drawContours(xmask, [cnt], -1, 0, -1)	
     	
     finimage = cv2.bitwise_and(fundus_eroded,fundus_eroded,mask=xmask)
-    #cv2.imwrite("arbol_vascular_mejorado.jpg", finimage)	
+    cv2.imwrite("arbol_vascular_mejorado.jpg", finimage)	
     blood_vessels = finimage#cv2.bitwise_not(finimage)
-    #cv2.imwrite("mascara_arbol_vascular.jpg", blood_vessels)
+    cv2.imwrite("mascara_arbol_vascular.jpg", blood_vessels)
     return blood_vessels
 
 # Escribir el nombre de la carpeta y de la imagen a tratar
@@ -116,14 +117,14 @@ img_folder = 'MAE0000043/'
 img_name = 'DS000DGS.JPG'
 img = io.imread(path + img_folder + img_name)
 showImage(img)
-#cv2.imwrite("original.jpg", img)
+cv2.imwrite("original.jpg", img)
 
 # Extracción de máscara vascular
 bv_mask = getBvMask(img)
 
 # Inpainting sobre la imagen original para extraer los vasos:
 inpaint=cv2.inpaint(img, bv_mask,8,cv2.INPAINT_TELEA)
-#io.imsave('sin_vasos.jpg', inpaint)
+io.imsave('sin_vasos.jpg', inpaint)
 
 # Componente verde de la imagen sin vasos
 ri,inpaint_g,bi = cv2.split(inpaint)
@@ -184,4 +185,4 @@ im_opened = skimage.img_as_ubyte(im_opened)
 # Visualice la imagen filtrada y compare
 #io.imshow(im_opened)
 #http://scikit-image.org/docs/dev/api/skimage.morphology.html#skimage.morphology.remove_small_objects
-io.imsave('elemento_circular4.jpg', im_opened)
+io.imsave('candidatos_definitivos.jpg', im_opened)
